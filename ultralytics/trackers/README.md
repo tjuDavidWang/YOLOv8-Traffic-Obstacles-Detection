@@ -125,7 +125,6 @@ Here is a Python script using OpenCV (`cv2`) and YOLOv8 to run object tracking o
 
 ```python
 import cv2
-
 from ultralytics import YOLO
 
 # Load the YOLOv8 model
@@ -177,7 +176,6 @@ from collections import defaultdict
 
 import cv2
 import numpy as np
-
 from ultralytics import YOLO
 
 # Load the YOLOv8 model
@@ -259,7 +257,6 @@ Finally, after all threads have completed their task, the windows displaying the
 import threading
 
 import cv2
-
 from ultralytics import YOLO
 
 

@@ -17,7 +17,7 @@ class NASValidator(DetectionValidator):
     ultimately producing the final detections.
 
     Attributes:
-        args (Namespace): Namespace containing various configurations for post-processing, such as confidence and IoU.
+        args (Namespace): Namespace containing various configurations for post-processing, such as confidence and IoU thresholds.
         lb (torch.Tensor): Optional tensor for multilabel NMS.
 
     Example:

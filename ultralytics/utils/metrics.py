@@ -24,7 +24,7 @@ def bbox_ioa(box1, box2, iou=False, eps=1e-7):
     Args:
         box1 (np.ndarray): A numpy array of shape (n, 4) representing n bounding boxes.
         box2 (np.ndarray): A numpy array of shape (m, 4) representing m bounding boxes.
-        iou (bool): Calculate the standard IoU if True else return inter_area/box2_area.
+        iou (bool): Calculate the standard iou if True else return inter_area/box2_area.
         eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
 
     Returns:
@@ -72,23 +72,98 @@ def box_iou(box1, box2, eps=1e-7):
     return inter / ((a2 - a1).prod(2) + (b2 - b1).prod(2) - inter + eps)
 
 
-def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
-    """
-    Calculate Intersection over Union (IoU) of box1(1, 4) to box2(n, 4).
+# def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
+#     """
+#     Calculate Intersection over Union (IoU) of box1(1, 4) to box2(n, 4).
+#
+#     Args:
+#         box1 (torch.Tensor): A tensor representing a single bounding box with shape (1, 4).
+#         box2 (torch.Tensor): A tensor representing n bounding boxes with shape (n, 4).
+#         xywh (bool, optional): If True, input boxes are in (x, y, w, h) format. If False, input boxes are in
+#                                (x1, y1, x2, y2) format. Defaults to True.
+#         GIoU (bool, optional): If True, calculate Generalized IoU. Defaults to False.
+#         DIoU (bool, optional): If True, calculate Distance IoU. Defaults to False.
+#         CIoU (bool, optional): If True, calculate Complete IoU. Defaults to False.
+#         eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
+#
+#     Returns:
+#         (torch.Tensor): IoU, GIoU, DIoU, or CIoU values depending on the specified flags.
+#     """
+#
+#     # Get the coordinates of bounding boxes
+#     if xywh:  # transform from xywh to xyxy
+#         (x1, y1, w1, h1), (x2, y2, w2, h2) = box1.chunk(4, -1), box2.chunk(4, -1)
+#         w1_, h1_, w2_, h2_ = w1 / 2, h1 / 2, w2 / 2, h2 / 2
+#         b1_x1, b1_x2, b1_y1, b1_y2 = x1 - w1_, x1 + w1_, y1 - h1_, y1 + h1_
+#         b2_x1, b2_x2, b2_y1, b2_y2 = x2 - w2_, x2 + w2_, y2 - h2_, y2 + h2_
+#     else:  # x1, y1, x2, y2 = box1
+#         b1_x1, b1_y1, b1_x2, b1_y2 = box1.chunk(4, -1)
+#         b2_x1, b2_y1, b2_x2, b2_y2 = box2.chunk(4, -1)
+#         w1, h1 = b1_x2 - b1_x1, b1_y2 - b1_y1 + eps
+#         w2, h2 = b2_x2 - b2_x1, b2_y2 - b2_y1 + eps
+#
+#     # Intersection area
+#     inter = (b1_x2.minimum(b2_x2) - b1_x1.maximum(b2_x1)).clamp_(0) * (
+#         b1_y2.minimum(b2_y2) - b1_y1.maximum(b2_y1)
+#     ).clamp_(0)
+#
+#     # Union Area
+#     union = w1 * h1 + w2 * h2 - inter + eps
+#
+#     # IoU
+#     iou = inter / union
+#     if CIoU or DIoU or GIoU:
+#         cw = b1_x2.maximum(b2_x2) - b1_x1.minimum(b2_x1)  # convex (smallest enclosing box) width
+#         ch = b1_y2.maximum(b2_y2) - b1_y1.minimum(b2_y1)  # convex height
+#         if CIoU or DIoU:  # Distance or Complete IoU https://arxiv.org/abs/1911.08287v1
+#             c2 = cw**2 + ch**2 + eps  # convex diagonal squared
+#             rho2 = ((b2_x1 + b2_x2 - b1_x1 - b1_x2) ** 2 + (b2_y1 + b2_y2 - b1_y1 - b1_y2) ** 2) / 4  # center dist ** 2
+#             if CIoU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
+#                 v = (4 / math.pi**2) * (torch.atan(w2 / h2) - torch.atan(w1 / h1)).pow(2)
+#                 with torch.no_grad():
+#                     alpha = v / (v - iou + (1 + eps))
+#                 return iou - (rho2 / c2 + v * alpha)  # CIoU
+#             return iou - rho2 / c2  # DIoU
+#         c_area = cw * ch + eps  # convex area
+#         return iou - (c_area - union) / c_area  # GIoU https://arxiv.org/pdf/1902.09630.pdf
+#     return iou  # IoU
+class WIoU_Scale:
+    ''' monotonous: {
+            None: origin v1
+            True: monotonic FM v2
+            False: non-monotonic FM v3
+        }
+        momentum: The momentum of running mean'''
 
-    Args:
-        box1 (torch.Tensor): A tensor representing a single bounding box with shape (1, 4).
-        box2 (torch.Tensor): A tensor representing n bounding boxes with shape (n, 4).
-        xywh (bool, optional): If True, input boxes are in (x, y, w, h) format. If False, input boxes are in
-                               (x1, y1, x2, y2) format. Defaults to True.
-        GIoU (bool, optional): If True, calculate Generalized IoU. Defaults to False.
-        DIoU (bool, optional): If True, calculate Distance IoU. Defaults to False.
-        CIoU (bool, optional): If True, calculate Complete IoU. Defaults to False.
-        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
+    iou_mean = 1.
+    monotonous = False
+    _momentum = 1 - 0.5 ** (1 / 7000)
+    _is_train = True
 
-    Returns:
-        (torch.Tensor): IoU, GIoU, DIoU, or CIoU values depending on the specified flags.
-    """
+    def __init__(self, iou):
+        self.iou = iou
+        self._update(self)
+
+    @classmethod
+    def _update(cls, self):
+        if cls._is_train: cls.iou_mean = (1 - cls._momentum) * cls.iou_mean + \
+                                         cls._momentum * self.iou.detach().mean().item()
+
+    @classmethod
+    def _scaled_loss(cls, self, gamma=1.9, delta=3):
+        if isinstance(self.monotonous, bool):
+            if self.monotonous:
+                return (self.iou.detach() / self.iou_mean).sqrt()
+            else:
+                beta = self.iou.detach() / self.iou_mean
+                alpha = delta * torch.pow(gamma, beta - delta)
+                return beta / alpha
+        return 1
+
+##############------------------------------------------------WIOU损失---------------------------------
+def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=True, SIoU=False, EIoU=False, WIoU=False, Focal=False,
+             alpha=1, gamma=0.5, scale=False, eps=1e-7):         ###----这一块是改损失函数，你需要哪个，就把哪个True就行,V8自带的是ciou
+    # Returns Intersection over Union (IoU) of box1(1,4) to box2(n,4)
 
     # Get the coordinates of bounding boxes
     if xywh:  # transform from xywh to xyxy
@@ -99,38 +174,92 @@ def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7
     else:  # x1, y1, x2, y2 = box1
         b1_x1, b1_y1, b1_x2, b1_y2 = box1.chunk(4, -1)
         b2_x1, b2_y1, b2_x2, b2_y2 = box2.chunk(4, -1)
-        w1, h1 = b1_x2 - b1_x1, b1_y2 - b1_y1 + eps
-        w2, h2 = b2_x2 - b2_x1, b2_y2 - b2_y1 + eps
+        w1, h1 = b1_x2 - b1_x1, (b1_y2 - b1_y1).clamp(eps)
+        w2, h2 = b2_x2 - b2_x1, (b2_y2 - b2_y1).clamp(eps)
 
     # Intersection area
-    inter = (b1_x2.minimum(b2_x2) - b1_x1.maximum(b2_x1)).clamp_(0) * (
-        b1_y2.minimum(b2_y2) - b1_y1.maximum(b2_y1)
-    ).clamp_(0)
+    inter = (b1_x2.minimum(b2_x2) - b1_x1.maximum(b2_x1)).clamp(0) * \
+            (b1_y2.minimum(b2_y2) - b1_y1.maximum(b2_y1)).clamp(0)
 
     # Union Area
     union = w1 * h1 + w2 * h2 - inter + eps
+    if scale:
+        self = WIoU_Scale(1 - (inter / union))
 
     # IoU
-    iou = inter / union
-    if CIoU or DIoU or GIoU:
+    # iou = inter / union # ori iou
+    iou = torch.pow(inter / (union + eps), alpha)  # alpha iou
+    if CIoU or DIoU or GIoU or EIoU or SIoU or WIoU:
         cw = b1_x2.maximum(b2_x2) - b1_x1.minimum(b2_x1)  # convex (smallest enclosing box) width
         ch = b1_y2.maximum(b2_y2) - b1_y1.minimum(b2_y1)  # convex height
-        if CIoU or DIoU:  # Distance or Complete IoU https://arxiv.org/abs/1911.08287v1
-            c2 = cw.pow(2) + ch.pow(2) + eps  # convex diagonal squared
-            rho2 = (
-                (b2_x1 + b2_x2 - b1_x1 - b1_x2).pow(2) + (b2_y1 + b2_y2 - b1_y1 - b1_y2).pow(2)
-            ) / 4  # center dist**2
+        if CIoU or DIoU or EIoU or SIoU or WIoU:  # Distance or Complete IoU https://arxiv.org/abs/1911.08287v1
+            c2 = (cw ** 2 + ch ** 2) ** alpha + eps  # convex diagonal squared
+            rho2 = (((b2_x1 + b2_x2 - b1_x1 - b1_x2) ** 2 + (
+                        b2_y1 + b2_y2 - b1_y1 - b1_y2) ** 2) / 4) ** alpha  # center dist ** 2
             if CIoU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
-                v = (4 / math.pi**2) * ((w2 / h2).atan() - (w1 / h1).atan()).pow(2)
+                v = (4 / math.pi ** 2) * (torch.atan(w2 / h2) - torch.atan(w1 / h1)).pow(2)
                 with torch.no_grad():
-                    alpha = v / (v - iou + (1 + eps))
-                return iou - (rho2 / c2 + v * alpha)  # CIoU
-            return iou - rho2 / c2  # DIoU
+                    alpha_ciou = v / (v - iou + (1 + eps))
+                if Focal:
+                    return iou - (rho2 / c2 + torch.pow(v * alpha_ciou + eps, alpha)), torch.pow(inter / (union + eps),
+                                                                                                 gamma)  # Focal_CIoU
+                else:
+                    return iou - (rho2 / c2 + torch.pow(v * alpha_ciou + eps, alpha))  # CIoU
+            elif EIoU:
+                rho_w2 = ((b2_x2 - b2_x1) - (b1_x2 - b1_x1)) ** 2
+                rho_h2 = ((b2_y2 - b2_y1) - (b1_y2 - b1_y1)) ** 2
+                cw2 = torch.pow(cw ** 2 + eps, alpha)
+                ch2 = torch.pow(ch ** 2 + eps, alpha)
+                if Focal:
+                    return iou - (rho2 / c2 + rho_w2 / cw2 + rho_h2 / ch2), torch.pow(inter / (union + eps),
+                                                                                      gamma)  # Focal_EIou
+                else:
+                    return iou - (rho2 / c2 + rho_w2 / cw2 + rho_h2 / ch2)  # EIou
+            elif SIoU:
+                # SIoU Loss https://arxiv.org/pdf/2205.12740.pdf
+                s_cw = (b2_x1 + b2_x2 - b1_x1 - b1_x2) * 0.5 + eps
+                s_ch = (b2_y1 + b2_y2 - b1_y1 - b1_y2) * 0.5 + eps
+                sigma = torch.pow(s_cw ** 2 + s_ch ** 2, 0.5)
+                sin_alpha_1 = torch.abs(s_cw) / sigma
+                sin_alpha_2 = torch.abs(s_ch) / sigma
+                threshold = pow(2, 0.5) / 2
+                sin_alpha = torch.where(sin_alpha_1 > threshold, sin_alpha_2, sin_alpha_1)
+                angle_cost = torch.cos(torch.arcsin(sin_alpha) * 2 - math.pi / 2)
+                rho_x = (s_cw / cw) ** 2
+                rho_y = (s_ch / ch) ** 2
+                gamma = angle_cost - 2
+                distance_cost = 2 - torch.exp(gamma * rho_x) - torch.exp(gamma * rho_y)
+                omiga_w = torch.abs(w1 - w2) / torch.max(w1, w2)
+                omiga_h = torch.abs(h1 - h2) / torch.max(h1, h2)
+                shape_cost = torch.pow(1 - torch.exp(-1 * omiga_w), 4) + torch.pow(1 - torch.exp(-1 * omiga_h), 4)
+                if Focal:
+                    return iou - torch.pow(0.5 * (distance_cost + shape_cost) + eps, alpha), torch.pow(
+                        inter / (union + eps), gamma)  # Focal_SIou
+                else:
+                    return iou - torch.pow(0.5 * (distance_cost + shape_cost) + eps, alpha)  # SIou
+            elif WIoU:
+                if Focal:
+                    raise RuntimeError("WIoU do not support Focal.")
+                elif scale:
+                    return getattr(WIoU_Scale, '_scaled_loss')(self), (1 - iou) * torch.exp(
+                        (rho2 / c2)), iou  # WIoU https://arxiv.org/abs/2301.10051
+                else:
+                    return iou, torch.exp((rho2 / c2))  # WIoU v1
+            if Focal:
+                return iou - rho2 / c2, torch.pow(inter / (union + eps), gamma)  # Focal_DIoU
+            else:
+                return iou - rho2 / c2  # DIoU
         c_area = cw * ch + eps  # convex area
-        return iou - (c_area - union) / c_area  # GIoU https://arxiv.org/pdf/1902.09630.pdf
-    return iou  # IoU
-
-
+        if Focal:
+            return iou - torch.pow((c_area - union) / c_area + eps, alpha), torch.pow(inter / (union + eps),
+                                                                                      gamma)  # Focal_GIoU https://arxiv.org/pdf/1902.09630.pdf
+        else:
+            return iou - torch.pow((c_area - union) / c_area + eps, alpha)  # GIoU https://arxiv.org/pdf/1902.09630.pdf
+    if Focal:
+        return iou, torch.pow(inter / (union + eps), gamma)  # Focal_IoU
+    else:
+        return iou  # IoU
+##############------------------------------------------------WIOU损失---------------------------------
 def mask_iou(mask1, mask2, eps=1e-7):
     """
     Calculate masks IoU.
@@ -164,12 +293,12 @@ def kpt_iou(kpt1, kpt2, area, sigma, eps=1e-7):
     Returns:
         (torch.Tensor): A tensor of shape (N, M) representing keypoint similarities.
     """
-    d = (kpt1[:, None, :, 0] - kpt2[..., 0]).pow(2) + (kpt1[:, None, :, 1] - kpt2[..., 1]).pow(2)  # (N, M, 17)
+    d = (kpt1[:, None, :, 0] - kpt2[..., 0]) ** 2 + (kpt1[:, None, :, 1] - kpt2[..., 1]) ** 2  # (N, M, 17)
     sigma = torch.tensor(sigma, device=kpt1.device, dtype=kpt1.dtype)  # (17, )
     kpt_mask = kpt1[..., 2] != 0  # (N, 17)
-    e = d / ((2 * sigma).pow(2) * (area[:, None, None] + eps) * 2)  # from cocoeval
+    e = d / (2 * sigma) ** 2 / (area[:, None, None] + eps) / 2  # from cocoeval
     # e = d / ((area[None, :, None] + eps) * sigma) ** 2 / 2  # from formula
-    return ((-e).exp() * kpt_mask[:, None]).sum(-1) / (kpt_mask.sum(-1)[:, None] + eps)
+    return (torch.exp(-e) * kpt_mask[:, None]).sum(-1) / (kpt_mask.sum(-1)[:, None] + eps)
 
 
 def _get_covariance_matrix(boxes):
@@ -183,18 +312,18 @@ def _get_covariance_matrix(boxes):
         (torch.Tensor): Covariance metrixs corresponding to original rotated bounding boxes.
     """
     # Gaussian bounding boxes, ignore the center points (the first two columns) because they are not needed here.
-    gbbs = torch.cat((boxes[:, 2:4].pow(2) / 12, boxes[:, 4:]), dim=-1)
+    gbbs = torch.cat((torch.pow(boxes[:, 2:4], 2) / 12, boxes[:, 4:]), dim=-1)
     a, b, c = gbbs.split(1, dim=-1)
-    cos = c.cos()
-    sin = c.sin()
-    cos2 = cos.pow(2)
-    sin2 = sin.pow(2)
-    return a * cos2 + b * sin2, a * sin2 + b * cos2, (a - b) * cos * sin
+    return (
+        a * torch.cos(c) ** 2 + b * torch.sin(c) ** 2,
+        a * torch.sin(c) ** 2 + b * torch.cos(c) ** 2,
+        a * torch.cos(c) * torch.sin(c) - b * torch.sin(c) * torch.cos(c),
+    )
 
 
 def probiou(obb1, obb2, CIoU=False, eps=1e-7):
     """
-    Calculate the prob IoU between oriented bounding boxes, https://arxiv.org/pdf/2106.06072v1.pdf.
+    Calculate the prob iou between oriented bounding boxes, https://arxiv.org/pdf/2106.06072v1.pdf.
 
     Args:
         obb1 (torch.Tensor): A tensor of shape (N, 5) representing ground truth obbs, with xywhr format.
@@ -210,21 +339,26 @@ def probiou(obb1, obb2, CIoU=False, eps=1e-7):
     a2, b2, c2 = _get_covariance_matrix(obb2)
 
     t1 = (
-        ((a1 + a2) * (y1 - y2).pow(2) + (b1 + b2) * (x1 - x2).pow(2)) / ((a1 + a2) * (b1 + b2) - (c1 + c2).pow(2) + eps)
+        ((a1 + a2) * (torch.pow(y1 - y2, 2)) + (b1 + b2) * (torch.pow(x1 - x2, 2)))
+        / ((a1 + a2) * (b1 + b2) - (torch.pow(c1 + c2, 2)) + eps)
     ) * 0.25
-    t2 = (((c1 + c2) * (x2 - x1) * (y1 - y2)) / ((a1 + a2) * (b1 + b2) - (c1 + c2).pow(2) + eps)) * 0.5
+    t2 = (((c1 + c2) * (x2 - x1) * (y1 - y2)) / ((a1 + a2) * (b1 + b2) - (torch.pow(c1 + c2, 2)) + eps)) * 0.5
     t3 = (
-        ((a1 + a2) * (b1 + b2) - (c1 + c2).pow(2))
-        / (4 * ((a1 * b1 - c1.pow(2)).clamp_(0) * (a2 * b2 - c2.pow(2)).clamp_(0)).sqrt() + eps)
-        + eps
-    ).log() * 0.5
-    bd = (t1 + t2 + t3).clamp(eps, 100.0)
-    hd = (1.0 - (-bd).exp() + eps).sqrt()
+        torch.log(
+            ((a1 + a2) * (b1 + b2) - (torch.pow(c1 + c2, 2)))
+            / (4 * torch.sqrt((a1 * b1 - torch.pow(c1, 2)).clamp_(0) * (a2 * b2 - torch.pow(c2, 2)).clamp_(0)) + eps)
+            + eps
+        )
+        * 0.5
+    )
+    bd = t1 + t2 + t3
+    bd = torch.clamp(bd, eps, 100.0)
+    hd = torch.sqrt(1.0 - torch.exp(-bd) + eps)
     iou = 1 - hd
     if CIoU:  # only include the wh aspect ratio part
         w1, h1 = obb1[..., 2:4].split(1, dim=-1)
         w2, h2 = obb2[..., 2:4].split(1, dim=-1)
-        v = (4 / math.pi**2) * ((w2 / h2).atan() - (w1 / h1).atan()).pow(2)
+        v = (4 / math.pi**2) * (torch.atan(w2 / h2) - torch.atan(w1 / h1)).pow(2)
         with torch.no_grad():
             alpha = v / (v - iou + (1 + eps))
         return iou - v * alpha  # CIoU
@@ -233,7 +367,7 @@ def probiou(obb1, obb2, CIoU=False, eps=1e-7):
 
 def batch_probiou(obb1, obb2, eps=1e-7):
     """
-    Calculate the prob IoU between oriented bounding boxes, https://arxiv.org/pdf/2106.06072v1.pdf.
+    Calculate the prob iou between oriented bounding boxes, https://arxiv.org/pdf/2106.06072v1.pdf.
 
     Args:
         obb1 (torch.Tensor | np.ndarray): A tensor of shape (N, 5) representing ground truth obbs, with xywhr format.
@@ -252,16 +386,21 @@ def batch_probiou(obb1, obb2, eps=1e-7):
     a2, b2, c2 = (x.squeeze(-1)[None] for x in _get_covariance_matrix(obb2))
 
     t1 = (
-        ((a1 + a2) * (y1 - y2).pow(2) + (b1 + b2) * (x1 - x2).pow(2)) / ((a1 + a2) * (b1 + b2) - (c1 + c2).pow(2) + eps)
+        ((a1 + a2) * (torch.pow(y1 - y2, 2)) + (b1 + b2) * (torch.pow(x1 - x2, 2)))
+        / ((a1 + a2) * (b1 + b2) - (torch.pow(c1 + c2, 2)) + eps)
     ) * 0.25
-    t2 = (((c1 + c2) * (x2 - x1) * (y1 - y2)) / ((a1 + a2) * (b1 + b2) - (c1 + c2).pow(2) + eps)) * 0.5
+    t2 = (((c1 + c2) * (x2 - x1) * (y1 - y2)) / ((a1 + a2) * (b1 + b2) - (torch.pow(c1 + c2, 2)) + eps)) * 0.5
     t3 = (
-        ((a1 + a2) * (b1 + b2) - (c1 + c2).pow(2))
-        / (4 * ((a1 * b1 - c1.pow(2)).clamp_(0) * (a2 * b2 - c2.pow(2)).clamp_(0)).sqrt() + eps)
-        + eps
-    ).log() * 0.5
-    bd = (t1 + t2 + t3).clamp(eps, 100.0)
-    hd = (1.0 - (-bd).exp() + eps).sqrt()
+        torch.log(
+            ((a1 + a2) * (b1 + b2) - (torch.pow(c1 + c2, 2)))
+            / (4 * torch.sqrt((a1 * b1 - torch.pow(c1, 2)).clamp_(0) * (a2 * b2 - torch.pow(c2, 2)).clamp_(0)) + eps)
+            + eps
+        )
+        * 0.5
+    )
+    bd = t1 + t2 + t3
+    bd = torch.clamp(bd, eps, 100.0)
+    hd = torch.sqrt(1.0 - torch.exp(-bd) + eps)
     return 1 - hd
 
 
@@ -298,7 +437,7 @@ class ConfusionMatrix:
         self.task = task
         self.matrix = np.zeros((nc + 1, nc + 1)) if self.task == "detect" else np.zeros((nc, nc))
         self.nc = nc  # number of classes
-        self.conf = 0.25 if conf in {None, 0.001} else conf  # apply 0.25 if default val conf is passed
+        self.conf = 0.25 if conf in (None, 0.001) else conf  # apply 0.25 if default val conf is passed
         self.iou_thres = iou_thres
 
     def process_cls_preds(self, preds, targets):
@@ -395,19 +534,19 @@ class ConfusionMatrix:
             names (tuple): Names of classes, used as labels on the plot.
             on_plot (func): An optional callback to pass plots path and data when they are rendered.
         """
-        import seaborn  # scope for faster 'import ultralytics'
+        import seaborn as sn
 
         array = self.matrix / ((self.matrix.sum(0).reshape(1, -1) + 1e-9) if normalize else 1)  # normalize columns
         array[array < 0.005] = np.nan  # don't annotate (would appear as 0.00)
 
         fig, ax = plt.subplots(1, 1, figsize=(12, 9), tight_layout=True)
         nc, nn = self.nc, len(names)  # number of classes, names
-        seaborn.set_theme(font_scale=1.0 if nc < 50 else 0.8)  # for label size
+        sn.set(font_scale=1.0 if nc < 50 else 0.8)  # for label size
         labels = (0 < nn < 99) and (nn == nc)  # apply names to ticklabels
         ticklabels = (list(names) + ["background"]) if labels else "auto"
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")  # suppress empty matrix RuntimeWarning: All-NaN slice encountered
-            seaborn.heatmap(
+            sn.heatmap(
                 array,
                 ax=ax,
                 annot=nc < 30,

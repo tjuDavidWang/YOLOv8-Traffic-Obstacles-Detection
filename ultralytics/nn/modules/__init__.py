@@ -23,11 +23,9 @@ from .block import (
     C3,
     C3TR,
     DFL,
-    ELAN1,
     SPP,
     SPPELAN,
     SPPF,
-    AConv,
     ADown,
     BNContrastiveHead,
     Bottleneck,
@@ -47,6 +45,7 @@ from .block import (
     RepC3,
     RepNCSPELAN4,
     ResNetLayer,
+    Silence,
 )
 from .conv import (
     CBAM,
@@ -135,6 +134,5 @@ __all__ = (
     "SPPELAN",
     "CBFuse",
     "CBLinear",
-    "AConv",
-    "ELAN1",
+    "Silence",
 )

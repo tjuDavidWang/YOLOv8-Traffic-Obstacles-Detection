@@ -13,12 +13,10 @@ from ultralytics.nn.modules import (
     C2,
     C3,
     C3TR,
-    ELAN1,
     OBB,
     SPP,
     SPPELAN,
     SPPF,
-    AConv,
     ADown,
     Bottleneck,
     BottleneckCSP,
@@ -49,6 +47,7 @@ from ultralytics.nn.modules import (
     ResNetLayer,
     RTDETRDecoder,
     Segment,
+    Silence,
     WorldDetect,
 )
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
@@ -66,6 +65,8 @@ from ultralytics.utils.torch_utils import (
     time_sync,
 )
 
+from ultralytics.nn.SlimNeck import VoVGSCSP, VoVGSCSPC, GSConv
+from ultralytics.nn.modules.GAM import GAM_Attention
 try:
     import thop
 except ImportError:
@@ -279,12 +280,6 @@ class DetectionModel(BaseModel):
         """Initialize the YOLOv8 detection model with the given config and parameters."""
         super().__init__()
         self.yaml = cfg if isinstance(cfg, dict) else yaml_model_load(cfg)  # cfg dict
-        if self.yaml["backbone"][0][2] == "Silence":
-            LOGGER.warning(
-                "WARNING ⚠️ YOLOv9 `Silence` module is deprecated in favor of nn.Identity. "
-                "Please delete local *.pt file and re-download the latest model checkpoint."
-            )
-            self.yaml["backbone"][0][2] = "nn.Identity"
 
         # Define model
         ch = self.yaml["ch"] = self.yaml.get("ch", ch)  # input channels
@@ -300,12 +295,8 @@ class DetectionModel(BaseModel):
         if isinstance(m, Detect):  # includes all Detect subclasses like Segment, Pose, OBB, WorldDetect
             s = 256  # 2x min stride
             m.inplace = self.inplace
-
-            def _forward(x):
-                """Performs a forward pass through the model, handling different Detect subclass types accordingly."""
-                return self.forward(x)[0] if isinstance(m, (Segment, Pose, OBB)) else self.forward(x)
-
-            m.stride = torch.tensor([s / x.shape[-2] for x in _forward(torch.zeros(1, ch, s, s))])  # forward
+            forward = lambda x: self.forward(x)[0] if isinstance(m, (Segment, Pose, OBB)) else self.forward(x)
+            m.stride = torch.tensor([s / x.shape[-2] for x in forward(torch.zeros(1, ch, s, s))])  # forward
             self.stride = m.stride
             m.bias_init()  # only run once
         else:
@@ -886,9 +877,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             C2,
             C2f,
             RepNCSPELAN4,
-            ELAN1,
             ADown,
-            AConv,
             SPPELAN,
             C2fAttn,
             C3,
@@ -898,7 +887,39 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             DWConvTranspose2d,
             C3x,
             RepC3,
+            RepConv,
+            VoVGSCSP,
+            VoVGSCSPC,
+            GSConv,
+            GAM_Attention
         }:
+        # if m in (
+        #     Classify, 
+        #     Conv, 
+        #     ConvTranspose, 
+        #     GhostConv, 
+        #     Bottleneck, 
+        #     GhostBottleneck, 
+        #     SPP, 
+        #     SPPF, 
+        #     DWConv, 
+        #     Focus,
+        #     BottleneckCSP, 
+        #     C1, 
+        #     C2, 
+        #     C2f, 
+        #     C3, 
+        #     C3TR, 
+        #     C3Ghost, 
+        #     nn.ConvTranspose2d, 
+        #     DWConvTranspose2d, 
+        #     C3x, 
+        #     RepC3,
+        #     RepConv, 
+        #     VoVGSCSP, 
+        #     VoVGSCSPC,
+        #     GSConv,
+        # ):
             c1, c2 = ch[f], args[0]
             if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
                 c2 = make_divisible(min(c2, max_channels) * width, 8)

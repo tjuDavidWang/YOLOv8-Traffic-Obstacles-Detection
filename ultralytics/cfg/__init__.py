@@ -95,19 +95,10 @@ CLI_HELP_MSG = f"""
     """
 
 # Define keys for arg type checks
-CFG_FLOAT_KEYS = {  # integer or float arguments, i.e. x=2 and x=2.0
-    "warmup_epochs",
-    "box",
-    "cls",
-    "dfl",
-    "degrees",
-    "shear",
-    "time",
-    "workspace",
-    "batch",
-}
-CFG_FRACTION_KEYS = {  # fractional float arguments with 0.0<=values<=1.0
+CFG_FLOAT_KEYS = {"warmup_epochs", "box", "cls", "dfl", "degrees", "shear", "time", "workspace"}
+CFG_FRACTION_KEYS = {
     "dropout",
+    "iou",
     "lr0",
     "lrf",
     "momentum",
@@ -130,10 +121,11 @@ CFG_FRACTION_KEYS = {  # fractional float arguments with 0.0<=values<=1.0
     "conf",
     "iou",
     "fraction",
-}
-CFG_INT_KEYS = {  # integer-only arguments
+}  # fraction floats 0.0 - 1.0
+CFG_INT_KEYS = {
     "epochs",
     "patience",
+    "batch",
     "workers",
     "seed",
     "close_mosaic",
@@ -144,7 +136,7 @@ CFG_INT_KEYS = {  # integer-only arguments
     "nbs",
     "save_period",
 }
-CFG_BOOL_KEYS = {  # boolean-only arguments
+CFG_BOOL_KEYS = {
     "save",
     "exist_ok",
     "verbose",
